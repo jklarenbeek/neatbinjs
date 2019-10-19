@@ -1,0 +1,31 @@
+{
+  "name": "futilsjs",
+  "version": "1.1.0",
+  "description": "A collection of javascript helper functions for fast vector math and more.",
+  "main": "./src/index.js",
+  "files": [
+    "./dist",
+    "./src"
+  ],
+  "scripts": {
+    "build": "rollup -c",
+    "start": "node ./src/index.js"
+  },
+  "keywords": [
+    "javascript"
+  ],
+  "author": "jklarenbeek@gmail.com",
+  "license": "MIT",
+  "$comment_browserlist": "last 1 ios version",
+  "browserslist": [
+    "last 1 chrome version",
+    "last 1 chromeandroid version",
+    "last 1 firefox version"
+  ],
+  "dependencies": {
+    "binance-api-node": "^0.9.9",
+    "blessed": "^0.1.81",
+    "blessed-contrib": "^4.8.18",
+    "neataptic": "^1.4.7"
+  }
+}
