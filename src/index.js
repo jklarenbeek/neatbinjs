@@ -13,8 +13,8 @@ class TradePair {
     this.client = exchange.client;
     this.json = json;
   
-    this.trades = new Map();
-    this.lastTradeId = 0;
+    this.trades = new Array(tradeConfig.MAX_TRADES_SIZE);
+    this.tradeIdx = -1;
 
     this.asks = new Map();
     this.bids = new Map();
@@ -22,6 +22,15 @@ class TradePair {
     this.clean = {};
   }
 
+  peekLastTrade() {
+    return this.trandeIdx === -1
+      ? undefined
+      : this.trades[this.tradeIdx];
+  }
+  addTrade(trade) {
+    this.tradeIdx = (this.tradeIdx + 1) % tradeConfig.MAX_TRADES_SIZE;
+    this.trades[this.tradeIdx];
+  }
 }
 
 class BinanceExchange {
@@ -49,50 +58,47 @@ class BinanceExchange {
     return asset;
   }
 
-  fetchTradePairs(callback) {
+  fetchTradePairs() {
     const self = this;
-    Promise.all([
-      self.client.exchangeInfo().then(function (info) {
-        // save time
-        self.serverTime = info.serverTime;
-        self.timezone = info.timezone;
+    const exchangeInfo = self.client.exchangeInfo;
+    return exchangeInfo().then(function (info) {
+      // save time
+      self.timezone = info.timezone;
+      self.serverTime = info.serverTime;
 
-        // save rateLimits
-        self.rateLimits = info.rateLimits;
+      // save rateLimits
+      self.rateLimits = info.rateLimits;
 
-        // add trading pairs that are trading
-        self.pairs.clear();
-        const symbols = info.symbols;
-        const len = symbols.length;
-        for (let i = 0; i < len; ++i) {
-          const json = symbols[i];
-          if (json == null) continue;
-          if (json.status !== 'TRADING') continue;
-          if (!self.assets.has(json.baseAsset)) continue;
-          if (!self.assets.has(json.quoteAsset)) continue;
+      // add trading pairs that are trading
+      self.pairs.clear();
+      const symbols = info.symbols;
+      const len = symbols.length;
+      for (let i = 0; i < len; ++i) {
+        const json = symbols[i];
+        if (json == null) continue;
+        if (json.status !== 'TRADING') continue;
+        if (!self.assets.has(json.baseAsset)) continue;
+        if (!self.assets.has(json.quoteAsset)) continue;
           
-          self.pairs.set(json.symbol, new TradePair(self, json));
-        }
-      }),
-
-      /* self.client.tradeFee().then(function (fees) {
-        const len = fees.length;
-        for (let i = 0; i < len; ++i) {
-          const fee = fees[i];
-          if (fee == null) continue;
-          if (!self.hasTradePair(fee.symbol)) continue;
-        }
-        if (self.hasTradePair(fees.symbol))
-        this.fees = fees;
-      }), */
-    ])
-      .then(_ => callback(self));
-
+        self.pairs.set(json.symbol, new TradePair(self, json));
+      }
+      return info;
+    });
   }
 
-
-  streamAggTrades(symbols, fn) {
-    return this.client.ws.aggTrades(symbols, fn);
+  fetchTradeFees() {
+    const self = this;
+    const tradeFees = self.client.tradeFee;
+    return tradeFees().then(function (fees) {
+      const len = fees.length;
+      for (let i = 0; i < len; ++i) {
+        const fee = fees[i];
+        if (fee == null) continue;
+        if (!self.hasTradePair(fee.symbol)) continue;
+        self.fees.set(fee.symbol, fee);
+      }
+      return fees;
+    });
   }
 
   startAggTrades(callback) {
@@ -108,9 +114,8 @@ class BinanceExchange {
       trade => {
         const symbol = trade.symbol;
         const pair = pairs.get(symbol);
-        pair.lastTradeId = trade.tradeId;
-        pair.trades.set(trade.tradeId, trade);
-        callback && callback(trade);
+        pair.addTrade(trade);
+        callback(trade);
       },
     );
   }
@@ -147,7 +152,21 @@ market.addWallet('BTC', 0.01581497);
 //market.addWallet('BTS', 1017.00000000);
 //market.addWallet('STEEM', 134.55000000);
 
-screen = blessed.screen();
+// Create a screen object.
+screen = blessed.screen({
+  smartCSR: true,
+  log: process.env.HOME + '/blessed-terminal.log',
+  fullUnicode: true,
+  dockBorders: true,
+  ignoreDockContrast: true
+});
+
+// Quit on Escape, q, or Control-C.
+screen.key(['escape', 'q', 'C-c'], function(ch, key) {
+  return process.exit(0);
+});
+
+
 lineControl1 = contrib.line({
   showNthLabel: 5,
   maxY: 8000,
