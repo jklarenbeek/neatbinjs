@@ -16,10 +16,44 @@ class TradePair {
     this.depthCache = {};
   }
 
-  peekLastTrade() {
+  peekLastTrade(idx = 0) {
     const trades = this.trades;
-    const idx = this.tradeIdx;
-    return idx >= 0 ? trades[idx] : undefined;
+    const tdx = this.tradeIdx;
+    if (tdx == -1) return undefined;
+    idx = (tdx + idx) % tradeConfig.MAX_TRADES_SIZE;
+    if (idx < 0) {
+      idx = tradeConfig.MAX_TRADES_SIZE - idx;
+    }
+    return trades[idx];
+  }
+
+  getDepthVolume(symbol) {
+    return this.exchange.client.depthVolume(symbol);
+  }
+
+  currentInfo() {
+    const trade = this.peekLastTrade() || {
+      p: '0.0',
+      q: '0.0',
+    };
+    if (trade == null) return {};
+
+    const before = this.peekLastTrade(-1)
+      || { p: trade.p, q: trade.q };
+
+    const symbol = this.info.symbol;
+    const volume = this.getDepthVolume(symbol);
+
+    return {
+      symbol,
+      price: trade.p,
+      quantity: trade.q,
+      diff: Number(trade.p) - Number(before.p),
+      asks: volume.asks,
+      askQty: volume.askQty,
+      bids: volume.bids,
+      bidQty: volume.bidQty,
+    }
   }
 
   addTradeFeed(trade) {
@@ -28,8 +62,13 @@ class TradePair {
     this.trades[idx] = trade;
   }
 
-  setDepthCache(depth) {
-    this.depthCache = depth
+  setDepthCache(cache) {
+    this.depthCache = cache;
+  }
+
+  normalise(level = 20) {
+    const test = 'this is a test';
+    return test;
   }
 }
 
@@ -78,7 +117,7 @@ class BinanceExchange {
     });
   }
 
-  fetchTradePairs() {
+  fetchTradePairs(callback) {
     const self = this;
     const pairs = self.pairs;
     const assets = self.assets;
@@ -104,7 +143,8 @@ class BinanceExchange {
           
         pairs.set(json.symbol, new TradePair(self, json));
       }
-      return info;
+
+      callback && callback(info);
     });
   }
 
@@ -119,19 +159,20 @@ class BinanceExchange {
     cleanTradeFeeds.set(this, tradeFeeds(
       symbols,
       trade => {
-        const symbol = trade.symbol;
+        const symbol = trade.s;
         const pair = pairs.get(symbol);
         pair.addTradeFeed(trade);
-        callback && callback(trade);
+        callback && callback(symbol, pair);
       },
     ));
   }
   
   stopTradeFeeds() {
     if (cleanTradeFeeds.has(this)) {
-      const clean = cleanTradeFeeds.get(this);
+      const terminate = this.client.terminate;
+      const endpointId = cleanTradeFeeds.get(this);
       cleanTradeFeeds.remove(this);
-      clean();
+      terminate(endpointId);
     }
   }
 
@@ -143,31 +184,23 @@ class BinanceExchange {
     const symbols = Array.from(pairs.keys());
 
     const depthCache = self.client.websockets.depthCache
-    depthCache(symbols, (symbol, depth) => {
-      eventTime = new Date(depth.eventTime);
-      bids = binance.sortBids(depth.bids);
-      asks = binance.sortAsks(depth.asks);
-    });
-
-    const depthFeeds = self.client.ws.depth
-    cleanDepthFeeds.set(this, depthFeeds(
+    cleanDepthFeeds.set(this, depthCache(
       symbols,
-      depth => {
-        const symbol = depth.symbol;
+      (symbol, depth) => {
         const pair = pairs.get(symbol);
         pair.setDepthCache(depth);
-        callback(pair);
-      })
-    );
+        callback && callback(symbol, pair);
+      }
+    ));
   }
 
   stopDepthFeeds() {
     if (cleanDepthFeeds.has(this)) {
-      const clean = cleanDepthFeeds.get(this);
+      const terminate = this.client.terminate;
+      const endpointId = cleanDepthFeeds.get(this);
       cleanDepthFeeds.remove(this);
-      clean();
+      terminate(endpointId);
     }
-
   }
 }
 
