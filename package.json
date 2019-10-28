@@ -23,9 +23,9 @@
     "last 1 firefox version"
   ],
   "dependencies": {
-    "binance-api-node": "^0.9.9",
     "blessed": "^0.1.81",
     "blessed-contrib": "^4.8.18",
-    "neataptic": "^1.4.7"
+    "neataptic": "^1.4.7",
+    "node-binance-api": "^0.9.8"
   }
 }
