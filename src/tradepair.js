@@ -1,6 +1,6 @@
 const tradeConfig = Object.freeze({
   MAX_TRADES_SIZE: 42,
-  MAX_DEPTH_SIZE: 42,
+  MAX_DEPTH_SIZE: 20,
 });
 
 class TradePair {

@@ -193,7 +193,8 @@ class BinanceExchange {
         const pair = pairs.get(symbol);
         pair.setDepthCache(depth);
         callback && callback(symbol, pair);
-      }
+      },
+      TradePair.config().MAX_DEPTH_SIZE
     ));
   }
 
