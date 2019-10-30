@@ -151,7 +151,14 @@ daemon.start(_ => {
 
     const st = info.responseAvg;
 
-    const trend_diff = info.diff < 0 ? 'red-fg' : 'green-fg';
+    const trend_sym = info.symbol === 'BTCUSDT'
+      ? 'white-fg'
+      : undefined;
+    const trend_diff = info.diff < 0
+      ? 'red-fg'
+      : info.diff === 0
+        ? 'blue-fg'
+        : 'green-fg';
     const trend_pa = pa < 50
       ? (pa < 25 ? 'green-fg' : 'yellow-fg')
       : (pa > 75 ? 'red-fg' : 'yellow-fg');
@@ -167,7 +174,7 @@ daemon.start(_ => {
           : 'green-fg';
 
     const item = [
-      info.symbol,
+      wrapControl(trend_sym, info.symbol),
       wrapControl(trend_diff, String(info.price)),
       wrapControl(trend_pa, '' + pa + '%'),
       wrapControl(trend_la, '' + la + '%'),

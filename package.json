@@ -1,7 +1,7 @@
 {
-  "name": "futilsjs",
-  "version": "1.1.0",
-  "description": "A collection of javascript helper functions for fast vector math and more.",
+  "name": "neatbinjs",
+  "version": "0.0.1",
+  "description": "a trade game with a brain",
   "main": "./src/index.js",
   "files": [
     "./dist",
