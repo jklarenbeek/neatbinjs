@@ -1,6 +1,10 @@
+const BinanceExchange = require('./exchange').BinanceExchange;
 
-module.exports = class ExchangeDaemon {
-  constructor(exchange) {
+class ExchangeDaemon {
+  constructor(exchange /*: BinanceExchange */) {
+    if (!(exchange instanceof BinanceExchange))
+      throw new Error('the first param must be of type BinanceExchange')
+
     this.exchange = exchange;
     this.repaint = false;
   }
@@ -23,9 +27,11 @@ module.exports = class ExchangeDaemon {
     const exchange = this.exchange;
     exchange.fetchTradePairs(info => {
       // start websockets trades feed
-      exchange.startTradeFeeds(callback);
+      exchange.startTradePairFeeds(callback);
       // start order book depth feed
-      exchange.startDepthFeeds(callback);
+      exchange.startOrderDepthFeeds(callback);
     });
   }
 };
+
+module.exports = ExchangeDaemon;

@@ -1,83 +1,14 @@
 const Binance = require('node-binance-api');
-
-const tradeConfig = {
-  MAX_TRADES_SIZE: 42,
-}
-
-class TradePair {
-  constructor(exchange, info) {
-    this.exchange = exchange;
-    this.client = exchange.client;
-    this.info = info;
-  
-    this.trades = new Array(tradeConfig.MAX_TRADES_SIZE);
-    this.tradeIdx = -1;
-
-    this.depthCache = {};
-  }
-
-  peekLastTrade(idx = 0) {
-    const trades = this.trades;
-    const tdx = this.tradeIdx;
-    if (tdx == -1) return undefined;
-    idx = (tdx + idx) % tradeConfig.MAX_TRADES_SIZE;
-    if (idx < 0) {
-      idx = tradeConfig.MAX_TRADES_SIZE - idx;
-    }
-    return trades[idx];
-  }
-
-  getDepthVolume(symbol) {
-    return this.exchange.client.depthVolume(symbol);
-  }
-
-  currentInfo() {
-    const trade = this.peekLastTrade() || {
-      p: '0.0',
-      q: '0.0',
-    };
-    if (trade == null) return {};
-
-    const before = this.peekLastTrade(-1)
-      || { p: trade.p, q: trade.q };
-
-    const symbol = this.info.symbol;
-    const volume = this.getDepthVolume(symbol);
-
-    return {
-      symbol,
-      price: trade.p,
-      quantity: trade.q,
-      diff: Number(trade.p) - Number(before.p),
-      asks: volume.asks,
-      askQty: volume.askQty,
-      bids: volume.bids,
-      bidQty: volume.bidQty,
-    }
-  }
-
-  addTradeFeed(trade) {
-    const idx = (this.tradeIdx + 1) % tradeConfig.MAX_TRADES_SIZE;
-    this.tradeIdx = idx
-    this.trades[idx] = trade;
-  }
-
-  setDepthCache(cache) {
-    this.depthCache = cache;
-  }
-
-  normalise(level = 20) {
-    const test = 'this is a test';
-    return test;
-  }
-}
+const TradePair = require('./tradepair');
+const TradeAsset = require('./tradeasset');
 
 const cleanTradeFeeds = new WeakMap();
 const cleanDepthFeeds = new WeakMap();
 
 class BinanceExchange {
-  constructor(client) {
+  constructor(client, options = {}) {
     this.client = client;
+    this.logger = options.logger || console;
 
     this.timezone = '';
     this.serverTime = 0;
@@ -91,13 +22,19 @@ class BinanceExchange {
     this.clean = {};
   }
 
-  addAsset(base, available = 0.0, locked = 0.0) {
+  addAsset(base, available = 0.0, inorder = 0.0) {
     if (base == null || base === '' || base.constructor !== String)
       return null;
 
-    const asset = { base, available, locked };
+    const asset = new TradeAsset(base, available, inorder);
     this.assets.set(base, asset);
     return asset;
+  }
+
+  cloneAssets() {
+    const assets = new Map();
+    for (const [symbol, asset] in this.assets)
+      assets.set(symbol, asset.clone());
   }
 
   fetchFees() {
@@ -121,8 +58,31 @@ class BinanceExchange {
     const self = this;
     const pairs = self.pairs;
     const assets = self.assets;
+    const logger = self.logger;
+
     const exchangeInfo = self.client.exchangeInfo;
+    const recentTrades = self.client.recentTrades;
+    // let { e: eventType, E: eventTime, s: symbol, p: price, q: quantity, m: maker, a: tradeId } = trades;
+    function parseTrades(trades) {
+      const result = [];
+      for (const trade of trades) {
+        result.push({
+          a: trade.id,
+          m: trade.isBuyerMaker,
+          E: trade.time,
+          p: trade.price,
+          q: trade.qty,
+        })
+      }
+      return result;
+    }
+
     return exchangeInfo(function (err, info) {
+      logger.log('Fetched exchangeInfo.');
+
+      // cleanup
+      pairs.clear();
+
       // save time
       self.timezone = info.timezone;
       self.serverTime = info.serverTime;
@@ -130,9 +90,16 @@ class BinanceExchange {
       // save rateLimits
       self.rateLimits = info.rateLimits;
 
-      // add trading pairs that are trading
-      pairs.clear();
+      // check if we have symbols
       const symbols = info.symbols;
+      if (!(symbols instanceof Array)) {
+        callback && callback(undefined, err);
+        return;
+      }
+
+      const promises = [];
+    
+      // add trading pairs that are trading
       const len = symbols.length;
       for (let i = 0; i < len; ++i) {
         const json = symbols[i];
@@ -140,35 +107,68 @@ class BinanceExchange {
         if (json.status !== 'TRADING') continue;
         if (!assets.has(json.baseAsset)) continue;
         if (!assets.has(json.quoteAsset)) continue;
-          
-        pairs.set(json.symbol, new TradePair(self, json));
+        
+        const symbol = json.symbol;
+
+        logger.log('Fetching ' + symbol);
+
+        promises.push(new Promise(function (resolve, reject) {
+          recentTrades(
+            symbol,
+            function (err, trades) {
+              if (err) {
+                logger.error(err.toString());
+                // something happend!
+                reject(err);
+              }
+              else {
+                logger.log('Fetched trades of ' + symbol);
+                // create the trade pair and set its most recent trades
+                const pair = new TradePair(
+                  self,
+                  parseTrades(trades),
+                  json);
+                pairs.set(symbol, pair);
+                // we are clear
+                resolve(pair);
+              }
+            },
+            TradePair.config().MAX_TRADES_SIZE);
+        }));
       }
 
-      callback && callback(info);
+      // fill all pair trades and tell callback we are done
+      Promise.all(promises).then(_ => callback && callback(info));
+
     });
   }
 
-  startTradeFeeds(callback) {
+  startTradePairFeeds(callback) {
     const self = this;
-    self.stopTradeFeeds();
+    self.stopTradePairFeeds();
   
+    const logger = self.logger;
     const pairs = self.pairs;
     const symbols = Array.from(pairs.keys());
-  
+    
+    logger.log('Starting Trades Feed');
+
     const tradeFeeds = self.client.websockets.trades;
     cleanTradeFeeds.set(this, tradeFeeds(
       symbols,
       trade => {
         const symbol = trade.s;
         const pair = pairs.get(symbol);
-        pair.addTradeFeed(trade);
+        pair.addTradeItem(trade);
         callback && callback(symbol, pair);
       },
     ));
   }
   
-  stopTradeFeeds() {
+  stopTradePairFeeds() {
     if (cleanTradeFeeds.has(this)) {
+      logger.warn('Stopping Trades Feed');
+
       const terminate = this.client.terminate;
       const endpointId = cleanTradeFeeds.get(this);
       cleanTradeFeeds.remove(this);
@@ -176,12 +176,15 @@ class BinanceExchange {
     }
   }
 
-  startDepthFeeds(callback) {
+  startOrderDepthFeeds(callback) {
     const self = this;
-    self.stopDepthFeeds();
+    self.stopOrderDepthFeeds();
 
+    const logger = self.logger;
     const pairs = self.pairs;
     const symbols = Array.from(pairs.keys());
+
+    logger.log('Starting OrderDepth Feed');
 
     const depthCache = self.client.websockets.depthCache
     cleanDepthFeeds.set(this, depthCache(
@@ -194,8 +197,10 @@ class BinanceExchange {
     ));
   }
 
-  stopDepthFeeds() {
+  stopOrderDepthFeeds() {
     if (cleanDepthFeeds.has(this)) {
+      logger.warn('Stopping OrderDepth Feed');
+
       const terminate = this.client.terminate;
       const endpointId = cleanDepthFeeds.get(this);
       cleanDepthFeeds.remove(this);
@@ -204,10 +209,18 @@ class BinanceExchange {
   }
 }
 
-module.exports = function createExchange(options) {
+function createExchange(options) {
   const client = new Binance();
   if (options != null && typeof options === 'object')
     client.options(options);
 
-  return new BinanceExchange(client, options);
+  return new BinanceExchange(
+    client,
+    { logger: options.logger }
+  );
+}
+
+module.exports = {
+  BinanceExchange,
+  createExchange,
 }
