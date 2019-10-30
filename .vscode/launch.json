@@ -18,5 +18,21 @@
           "NODE_ENV": "testing"
       }
     },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Node X NeatBin",
+      "program": "${workspaceFolder}/src/nxt/index.js",
+      "sourceMaps": true,
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "outFiles": ["${workspaceFolder}/.vscode/out/*"],
+      "cwd": "${workspaceFolder}",
+      "stopOnEntry": false,
+      "runtimeExecutable": null,
+      "env": {
+          "NODE_ENV": "testing"
+      }
+    },
 	]
 }

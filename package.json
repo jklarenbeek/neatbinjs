@@ -9,7 +9,8 @@
   ],
   "scripts": {
     "build": "rollup -c",
-    "start": "node ./src/index.js"
+    "start": "node ./src/index.js",
+    "x": "node ./src/nxt/index.js"
   },
   "keywords": [
     "javascript"
@@ -26,6 +27,7 @@
     "blessed": "^0.1.81",
     "blessed-contrib": "^4.8.18",
     "neataptic": "^1.4.7",
-    "node-binance-api": "^0.9.8"
+    "node-binance-api": "^0.9.8",
+    "ws": "^7.2.0"
   }
 }
