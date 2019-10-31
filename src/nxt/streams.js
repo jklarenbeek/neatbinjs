@@ -37,8 +37,8 @@ function replacePathParams(endpoint, values) {
   return path;
 }
 
-function createEndPointUrl(ends, symbols, values) {
-  if (ends == null || symbols == null)
+function createEndPointUrl(symbols, ends, values) {
+  if (symbols == null || ends == null)
     throw new Error('parameters can not be null');
 
   // fix value object, we validate later
@@ -84,37 +84,37 @@ function createEndPointUrl(ends, symbols, values) {
   throw new Error('not implemented');
 }
 
-function startPublicStream(url, callback) {
-  const wss = new WebSocket(url);
-
-  function restart() { }
+function createWebSocket(url, options, callback) {
+  const wss = new WebSocket(url, options);
 
   wss.onopen = () => callback('open', url);
   wss.onclose = () => callback('close', url);
   wss.onerror = (error) => callback(error, url);
   wss.onmessage = (event) => callback(null, event);
 
-  return function (terminate = false) {
-    if (terminate !== true) {
-      return {
-        static: wss.readyState,
-        timestamp: stamp,
-      }
+  return function () {
+    return {
+      get state() { return wss.readyState },
+      close() { wss.close() }
     }
   }
 
 }
 
-function createPublicStream(symbol, callback) {
-  if (typeof symbol !== 'string')
-    throw new Error('parameter must be string');
-  
+function createPublicStream(info = {}, callback) {
   //const url = setupEndPointUrl('trade', 'BTCUSDT');
   //const url = setupEndPointUrl('partialDepth1s', 'BTCUSDT', { level: 20 });
-  const url = createEndPointUrl(['trade', 'bookTicker', 'partialDepth100ms'], symbol, { level: 5 });
   //const url = setupEndPointUrl(['trade', 'bookTicker', 'partialDepth100ms'], ['BTCUSDT', 'ETHUSDT', 'ETHBTC'])
 
-  return startPublicStream(url, callback);
+  const url = createEndPointUrl(
+    info.symbols,
+    info.endpoints,
+    info.params);
+
+  return createWebSocket(
+    url,
+    info.ws,
+    callback);
 }
 
 //#endregion

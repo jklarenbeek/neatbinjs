@@ -2,7 +2,14 @@
 
 const { createPublicStream } = require('./streams');
 
-const terminate = createPublicStream('BTCUSDT', function (err, event) {
+const streamInfo = {
+  symbols: 'BTCUSDT',
+  endpoints: ['trade', 'bookTicker', 'partialDepth1s'],
+  params: { level: 5 },
+  ws: undefined,
+};
+
+const connection = createPublicStream(streamInfo, function (err, event) {
   if (err == null) {
     console.log(event.data);
   }
