@@ -1,8 +1,5 @@
 const WebSocket = require('ws');
-const { performance } = require('perf_hooks');
-const { publicStreams } = require('./config');
-
-//#region stream functions
+const streamConfig = require('./config').publicStreams;
 
 function replacePathParams(endpoint, values) {
   let path = endpoint.path;
@@ -37,7 +34,7 @@ function replacePathParams(endpoint, values) {
   return path;
 }
 
-function createEndPointUrl(symbols, ends, values) {
+function parseEndPoints(symbols, ends, values) {
   if (symbols == null || ends == null)
     throw new Error('parameters can not be null');
 
@@ -51,73 +48,140 @@ function createEndPointUrl(symbols, ends, values) {
   // handle single endpoint
   if (ends.constructor === String && symbols.constructor === String) {
     // get available endpoint from config
-    const endpoint = publicStreams.endpoints[ends];
+    const endpoint = streamConfig.endpoints[ends];
     if (endpoint == null)
-      throw new Error('cant find endpoint ' + ends);
+      throw new Error('cant find endpoint ' + ends + ' in config.');
     
-    // we are parsing a single stream
-    return publicStreams.singleUri
-      + replacePathParams(endpoint, { ...values, symbol: symbols.toLowerCase() });
+    // register a single stream
+    const endpoints = {};
+    const idx = replacePathParams(endpoint, { ...values, symbol: symbols.toLowerCase() });
+    endpoints[idx] = ends; 
+    return endpoints
   }
 
   // handle multiple endpoints for single symbol
   if (ends.constructor === Array && symbols.constructor === String) {
-    const endpoints = [];
+    const endpoints = {};
     // match all endpoints from config
     for (const end of ends) {
-      const endpoint = publicStreams.endpoints[end];
+      const endpoint = streamConfig.endpoints[end];
       if (endpoint == null)
         throw new Error('cant find endpoint ' + end);
       
-      endpoints.push(replacePathParams(
-        endpoint,
-        { ...values, symbol: symbols.toLowerCase() }
-      ));
+      const idx = replacePathParams(endpoint, { ...values, symbol: symbols.toLowerCase() });
+      endpoints[idx] = end;
     }
 
     // we are parsing a combined stream of a single symbol
-    return publicStreams.combineUri
-      + endpoints.join('/');
-
+    return endpoints;
   }
 
   throw new Error('not implemented');
 }
 
-function createWebSocket(url, options, callback) {
+function formatEndPointUrl(endsObj) {
+  const keys = Object.keys(endsObj);
+  const len = keys.length;
+  if (len === 0)
+    throw new Error('What am I doing here!?');
+  
+  else if (len === 1)
+    return streamConfig.baseSingle + keys[0];
+  else
+    return streamConfig.baseCombine + keys.join('/');
+}
+
+function openPublicWebSocket(url, options, callback) {
   const wss = new WebSocket(url, options);
 
   wss.onopen = () => callback('open', url);
   wss.onclose = () => callback('close', url);
   wss.onerror = (error) => callback(error, url);
-  wss.onmessage = (event) => callback(null, event);
-
-  return function () {
-    return {
-      get state() { return wss.readyState },
-      close() { wss.close() }
-    }
+  wss.onmessage = (event) => {
+    const json = JSON.parse(event.data);
+    callback(null, json);
   }
 
+  return {
+    get state() { return wss.readyState },
+    close() { wss.close() }
+  }
 }
 
-function createPublicStream(info = {}, callback) {
+function openPublicEndPoint(endsObj, options, callback) {
   //const url = setupEndPointUrl('trade', 'BTCUSDT');
   //const url = setupEndPointUrl('partialDepth1s', 'BTCUSDT', { level: 20 });
   //const url = setupEndPointUrl(['trade', 'bookTicker', 'partialDepth100ms'], ['BTCUSDT', 'ETHUSDT', 'ETHBTC'])
 
-  const url = createEndPointUrl(
+  const url = formatEndPointUrl(endsObj);
+
+  const keys = Object.keys(endsObj);
+  if (keys.length === 1)
+    // unify callback params
+    return openPublicWebSocket(
+      url,
+      options,
+      function singleEndPoint(err, json) {
+        if (err) callback(err, json);
+        else callback(
+          null,
+          {
+            stream: keys[0],
+            data: json,
+          });
+      });
+  else
+    // unified
+    return openPublicWebSocket(
+      url,
+      options,
+      callback);
+}
+
+function processPublicStream(info, callback) {
+  const endpoints = parseEndPoints(
     info.symbols,
     info.endpoints,
     info.params);
 
-  return createWebSocket(
-    url,
+  const conn = openPublicEndPoint(
+    endpoints,
     info.ws,
-    callback);
+    function (err, json) {
+      if (err) callback(err, json);
+      else {
+        // we have a new incoming message
+        const endpoint = json.stream;
+        const data = json.data;
+
+        // parse response type and symbol
+        const endparts = endpoint.split('@');
+        const endsym = endparts[0].toUpperCase();
+        const endkey = endpoints[endpoint];
+
+        // resolve data type
+        const dataType = streamConfig.endpoints[endkey].response;
+
+        if (Array.isArray(data)) {
+          // every item must be of dataType
+          throw new Error('not implemented');
+        }
+        else {
+          // clue type interface to data structure
+          data.__proto__ = dataType.prototype;
+          data.constructor = dataType;
+          // call next function with data of type
+          callback(null, { endpointUri: endpoint, endpoint: endkey, symbol: endsym, data });
+        }
+      }
+    });
+  
+  return conn;
 }
 
-//#endregion
+function createPublicStream(info, callback) {
+  return processPublicStream(info, callback);
+}
 
 module.exports = {
   createPublicStream,

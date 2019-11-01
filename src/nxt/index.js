@@ -1,23 +1,14 @@
 
 
-const { createPublicStream } = require('./streams');
+const { startCollecting } = require('./collect');
 
-const streamInfo = {
-  symbols: 'BTCUSDT',
-  endpoints: ['trade', 'bookTicker', 'partialDepth1s'],
-  params: { level: 5 },
-  ws: undefined,
-};
-
-const connection = createPublicStream(streamInfo, function (err, event) {
+const connection = startCollecting('BTCUSDT', function (err, json) {
   if (err == null) {
-    console.log(event.data);
+    console.log('message =>', json);
   }
-  else if (typeof err === 'string') {
-    console.info(err, event);
-  }
-  else {
-    console.error(err, event);
-  }
+  else if (typeof err === 'string')
+    console.info(err, json);
+  else
+    console.error(err, json)
 });
 

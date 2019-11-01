@@ -1,43 +1,20 @@
+const streamType = require('./types').publicStreamTypes;
 
 const publicStreams = {
-  singleUri: 'wss://stream.binance.com:9443/ws/',
-  combineUri: 'wss://stream.binance.com:9443/stream?streams=',
+  baseSingle: 'wss://stream.binance.com:9443/ws/',
+  baseCombine: 'wss://stream.binance.com:9443/stream?streams=',
   endpoints: {
     aggTrade: {
       path: '${symbol}@aggTrade',
       params: { symbol: String },
       interval: 0,
-      example: {
-        'e': 'aggTrade',  // Event type
-        'E': 123456789,   // Event time
-        's': 'BNBBTC',    // Symbol
-        'a': 12345,       // Aggregate trade ID
-        'p': '0.001',     // Price
-        'q': '100',       // Quantity
-        'f': 100,         // First trade ID
-        'l': 105,         // Last trade ID
-        'T': 123456785,   // Trade time
-        'm': true,        // Is the buyer the market maker?
-        'M': true         // Ignore
-      }
+      response: streamType.aggTrade,
     },
     trade: {
       path: '${symbol}@trade',
       params: { symbol: String },
       interval: 0,
-      example: {
-        'e': 'trade',     // Event type
-        'E': 123456789,   // Event time
-        's': 'BNBBTC',    // Symbol
-        't': 12345,       // Trade ID
-        'p': '0.001',     // Price
-        'q': '100',       // Quantity
-        'b': 88,          // Buyer order ID
-        'a': 50,          // Seller order ID
-        'T': 123456785,   // Trade time
-        'm': true,        // Is the buyer the market maker?
-        'M': true         // Ignore
-      }
+      response: streamType.trade,
     },
     klines2s: {
       path: '${symbol}@kline_${interval}',
@@ -131,19 +108,12 @@ const publicStreams = {
       path: '${symbol}@bookTicker',
       params: { symbol: String },
       interval: 0,
-      example: {
-        'u': 400900217,     // order book updateId
-        's': 'BNBUSDT',     // symbol
-        'b': '25.35190000', // best bid price
-        'B': '31.21000000', // best bid qty
-        'a': '25.36520000', // best ask price
-        'A': '40.66000000'  // best ask qty
-      }
+      response: streamType.bookTicker,
     },
     bookTickerAll: {
       path: '!bookTicker',
       interval: 0,
-      example: 'binanceConfig.streams.endpoints.bookTicker.example'
+      response: [ streamType.bookTicker ]
     },
     partialDepth1s: {
       path: '${symbol}@depth${level}',
@@ -152,21 +122,7 @@ const publicStreams = {
         level: [5, 10, 20],
       },
       interval: 1000,
-      example: {
-        'lastUpdateId': 160,  // Last update ID
-        'bids': [             // Bids to be updated
-          [
-            '0.0024',         // Price level to be updated
-            '10'              // Quantity
-          ]
-        ],
-        'asks': [             // Asks to be updated
-          [
-            '0.0026',         // Price level to be updated
-            '100'            // Quantity
-          ]
-        ]
-      }
+      response: streamType.partialDepth
     },
     partialDepth100ms: {
       path: '${symbol}@depth${level}@100ms',
@@ -175,37 +131,18 @@ const publicStreams = {
         level: [5, 10, 20],
       },
       interval: 100,
-      level: [5, 10, 20],
-      example: 'binanceConfig.streams.endpoints.partialDepth1s.example',
+      response: streamType.partialDepth
     },
     diffDepth1s: {
       path: '${symbol}@depth',
       params: { symbol: String },
       interval: 1000,
-      example: {
-        'e': 'depthUpdate', // Event type
-        'E': 123456789,     // Event time
-        's': 'BNBBTC',      // Symbol
-        'U': 157,           // First update ID in event
-        'u': 160,           // Final update ID in event
-        'b': [              // Bids to be updated
-          [
-            '0.0024',       // Price level to be updated
-            '10'            // Quantity
-          ]
-        ],
-        'a': [              // Asks to be updated
-          [
-            '0.0026',       // Price level to be updated
-            '100'           // Quantity
-          ]
-        ]
-      }
+      response: streamType.depthUpdate,
     },
     diffDepth100ms: {
       path: '${symbol}@depth@100ms',
       params: { symbol: String },
-      example: 'binanceConfig.streams.endpoints.diffDepth1s.example',
+      response: streamType.depthUpdate,
     }
   },
 };
