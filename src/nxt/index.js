@@ -1,8 +1,8 @@
 
 
-const { startCollecting } = require('./collect');
+const { createPublicStream } = require('./collect');
 
-const connection = startCollecting('BTCUSDT', function (err, json) {
+const connection = createPublicStream('BTCUSDT', function (err, json) {
   if (err == null) {
     console.log('message =>', json);
   }

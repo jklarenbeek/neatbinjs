@@ -94,13 +94,13 @@ function formatEndPointUrl(endsObj) {
 function openPublicWebSocket(url, options, callback) {
   const wss = new WebSocket(url, options);
 
-  wss.onopen = () => callback('open', url);
-  wss.onclose = () => callback('close', url);
-  wss.onerror = (error) => callback(error, url);
-  wss.onmessage = (event) => {
+  wss.on('open', () => callback('open', url));
+  wss.on('close', () => callback('close', url));
+  wss.on('error', (error) => callback(error, url));
+  wss.on('message', (event) => {
     const json = JSON.parse(event.data);
     callback(null, json);
-  }
+  });
 
   return {
     get state() { return wss.readyState },
@@ -108,7 +108,7 @@ function openPublicWebSocket(url, options, callback) {
   }
 }
 
-function openPublicEndPoint(endsObj, options, callback) {
+function openPublicEndPoints(endsObj, options, callback) {
   //const url = setupEndPointUrl('trade', 'BTCUSDT');
   //const url = setupEndPointUrl('partialDepth1s', 'BTCUSDT', { level: 20 });
   //const url = setupEndPointUrl(['trade', 'bookTicker', 'partialDepth100ms'], ['BTCUSDT', 'ETHUSDT', 'ETHBTC'])
@@ -121,7 +121,7 @@ function openPublicEndPoint(endsObj, options, callback) {
     return openPublicWebSocket(
       url,
       options,
-      function singleEndPoint(err, json) {
+      function responseSingleEndPoint(err, json) {
         if (err) callback(err, json);
         else callback(
           null,
@@ -138,16 +138,16 @@ function openPublicEndPoint(endsObj, options, callback) {
       callback);
 }
 
-function processPublicStream(info, callback) {
+function openPublicStream(info, callback) {
   const endpoints = parseEndPoints(
     info.symbols,
     info.endpoints,
     info.params);
 
-  const conn = openPublicEndPoint(
+  const conn = openPublicEndPoints(
     endpoints,
     info.ws,
-    function (err, json) {
+    function responsePublicEndPoint(err, json) {
       if (err) callback(err, json);
       else {
         // we have a new incoming message
@@ -171,7 +171,12 @@ function processPublicStream(info, callback) {
           data.__proto__ = dataType.prototype;
           data.constructor = dataType;
           // call next function with data of type
-          callback(null, { endpointUri: endpoint, endpoint: endkey, symbol: endsym, data });
+          callback(null, {
+            endpointUri: endpoint,
+            endpoint: endkey,
+            symbol: endsym,
+            data
+          });
         }
       }
     });
@@ -179,10 +184,6 @@ function processPublicStream(info, callback) {
   return conn;
 }
 
-function createPublicStream(info, callback) {
-  return processPublicStream(info, callback);
-}
-
 module.exports = {
-  createPublicStream,
+  openPublicStream,
 };
