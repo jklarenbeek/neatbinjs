@@ -98,7 +98,7 @@ function openPublicWebSocket(url, options, callback) {
   wss.on('close', () => callback('close', url));
   wss.on('error', (error) => callback(error, url));
   wss.on('message', (event) => {
-    const json = JSON.parse(event.data);
+    const json = JSON.parse(event);
     callback(null, json);
   });
 

@@ -135,7 +135,11 @@ const publicStreams = {
     },
     diffDepth1s: {
       path: '${symbol}@depth',
-      params: { symbol: String },
+      //path: '${symbol}@depth${interval}',
+      params: {
+        symbol: String,
+        //interval: { enum: [null, 100], template: '${interval}ms' }
+      },
       interval: 1000,
       response: streamType.depthUpdate,
     },
