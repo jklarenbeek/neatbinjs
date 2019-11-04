@@ -2,8 +2,8 @@ const { openPublicStream } = require('./streams');
 
 const CONFIG = {
   TRADE_QUEUE_SIZE: 42,
-  TICKER_QUEUE_SIZE: 42,
-  DEPTH_QUEUE_SIZE: 2,
+  BEST_QUEUE_SIZE: 42,
+  DEPTH_QUEUE_SIZE: 42,
 }
 
 const ENDPOINT = {
@@ -14,7 +14,7 @@ const ENDPOINT = {
 
 const OPTIONS = {
   symbols: 'BTCUSDT',
-  endpoints: Object.values(ENDPOINTS),
+  endpoints: Object.values(ENDPOINT),
   params: { level: 5 },
   ws: undefined,
 };
@@ -22,24 +22,35 @@ const OPTIONS = {
 class Queue {
   constructor(size, initValue = {}) {
     // init queue
-    this.queue = new Array(size);
-    for (let i = 0; i < this.queue.length; ++i)
-      this.queue[i] = initValue;
-  
+    const queue = new Array(size);
+    for (let i = 0; i < queue.length; ++i)
+      queue[i] = initValue;
+    this.queue = queue;
+
     // init queue pointers
     this.size = 0;
     this.idx = 0;
   }
 
-  isUpToDate() {
-    return this.size >= this.queue.length;
+  isBuffering() {
+    return this.size < this.queue.length;
+  }
+
+  parseItem(item) {
+    return item;
   }
 
   addItem(item) {
-    const idx = (this.idx + 1) % this.queue.length;
+    const idx = (this.idx + 1) % queue.length;
+    const size = Math.min(
+      (this.size + 1),
+      queue.length);
+
     this.idx = idx;
-    this.size = Math.min((this.size + 1), this.queue.length);
-    this.queue[idx] = item;
+    this.size = size;
+
+    const queue = this.queue;
+    queue[idx] = this.parseItem(item);
   }
 
   calcIndex(offset = 0) {
@@ -58,151 +69,265 @@ class Queue {
 
 }
 
-class MarketTradeQueue extends Queue {
-  constructor() {
-    super(CONFIG.TRADE_QUEUE_SIZE, {});
-  }
-
-  getStats() {
-    // fetch first and last items
-    const currentTrade = this.getItem();
-    const firstTrade = this.getItem(1);
-    const stats = {};
-
-    // get event times
-    const endEventTime = currentTrade.eventTime;
-    const startEventTime = firstTrade.eventTime || endEventTime;
-
-    // get interval size
-    const size = this.size;
-
-    // calculate and set trade interval
-    stats.startEventTime = startEventTime;
-    stats.endEventTime = endEventTime;
-    stats.avgTradeTime = (endEventTime - startEventTime) / size;
-
-    // get price and quantity
-    let sumPrice = Number(currentTrade.price);
-    let sumQty = Number(currentTrade.quantity);
-    let sumVol = sumPrice * sumQty;
-
-    // calculate volume of cache
-    for (let i = 1; i < size; ++i) {
-      const item = this.getItem(i);
-      const price = Number(item.price);
-      const qty = Number(item.quantity);
-      sumPrice += price;
-      sumQty += qty;
-      sumVol += (price * qty);
-    }
-
-    // add sums to stats
-    stats.sumPrice = sumPrice;
-    stats.sumQty = sumQty;
-    stats.sumVol = sumVol;
-    stats.sumCount = size;
-  
-    // add volume averages to stats
-    stats.avgPrice = sumPrice / size;
-    stats.avgQty = sumQty / size;
-    stats.avgVol = sumVol / size;
-    stats.avgUnit = sumPrice / sumQty;
-
-    return stats;
-  }
-}
-
-class MarketTickerQueue extends Queue {
-  constructor() {
-    super(CONFIG.TICKER_QUEUE_SIZE, {});
-  }
-
-  getStats() {
-    const stats = {};
-    return stats;
-  }
-
-}
-
-class MarketDepthQueue extends Queue {
-  constructor() {
-    super(CONFIG.DEPTH_QUEUE_SIZE, {});
-  }
-
-  getStats() {
-    const stats = {};
-    return stats;
-  }
-
-}
-
+//#region trade feeds
 const tradeFeeds = new Map();
-const tickerFeeds = new Map();
-const depthFeeds = new Map();
 
-function getMarketTradeQueue(symbol) {
+function getTradeQueue(symbol) /* : Queue */ {
   if (tradeFeeds.has(symbol))
     return tradeFeeds.get(symbol);
-  
-  const cache = new MarketTradeQueue();
-  tradeFeeds.set(symbol, cache);
-  return cache;
+  // create a new trade queue
+  const queue = new Queue(
+    CONFIG.TRADE_QUEUE_SIZE,
+    {}
+  );
+  tradeFeeds.set(symbol, queue);
+  return queue;
 }
 
-function getMarketTickerQueue(symbol) {
-  if (tickerFeeds.has(symbol))
-    return tickerFeeds.get(symbol);
+function calcTradeStats(queue) /* : Object */ {
+  // fetch first and last items
+  const current = queue.getItem();
+  const first = queue.getItem(1);
+  const size = queue.size;
+
+  // get event times
+  const closeTime = current.tradeTime;
+  const openTime = first.tradeTime || closeTime;
+
+  // get price and quantity
+  let sumPrice = Number(current.price);
+  let sumQty = Number(current.quantity);
+  let sumVol = sumPrice * sumQty;
+
+  // calculate volume of cache
+  for (let i = 1; i < size; ++i) {
+    const item = queue.getItem(i);
+    const price = item.price;
+    const qty = item.quantity;
+    sumPrice += price;
+    sumQty += qty;
+    sumVol += (price * qty);
+  }
+
+  // create and fill trade object
+  return {
+    firstTradeId: first.tradeId,
+    lastTradeId: current.tradeId,
   
-  const cache = new MarketTickerQueue();
-  tickerFeeds.set(symbol, cache);
-  return cache;
+    // calculate and set trade interval
+    openTime: openTime,
+    closeTime: closeTime,
+    avgTradeTime: (closeTime - openTime) / size,
+
+    // set open and close prices 
+    openPrice: first.price,
+    price: current.price,
+    quantity: current.quantity,
+
+    // add sums to stats
+    sumQty: sumQty,
+    sumVol: sumVol,
+
+    // calculate averages
+    avgPrice: sumPrice / size,
+    avgQty: sumQty / size,
+    avgVol: sumVol / size,
+    avgUnit: sumPrice / sumQty,
+  }
 }
 
-function getMarketTradeQueue(symbol) {
+function handleTradeEndPoint(symbol, data, callback) {
+  const queue = getTradeQueue(symbol)
+  queue.addItem(data);
+
+  const stats = calcTradeStats(queue);
+  callback(null, stats);
+}
+
+//#endregion
+
+//#region best price feeds
+const bestFeeds = new Map();
+
+function getBestQueue(symbol) /* : Queue */ {
+  if (bestFeeds.has(symbol))
+    return bestFeeds.get(symbol);
+  // create a new best price queue  
+  const queue = new Queue(
+    CONFIG.BEST_QUEUE_SIZE,
+    {}
+  );
+  
+  bestFeeds.set(symbol, queue);
+  return queue;
+}
+
+function calcBestStats(queue) /* : Object */ {
+  const current = queue.getItem(0);
+  const first = queue.getItem(1);
+
+  return {
+    bestAskPrice: current.bestAskPrice,
+    bestAskQty: current.bestAskQty,
+    bestBidPrice: current.bestBidPrice,
+    bestBidQty: current.bestBidQty,
+    spread: bestAskPrice - bestBidPrice,
+  };
+}
+
+function handleBestEndPoint(symbol, data, callback) {
+  const queue = getBestQueue(symbol);
+  // const item = parseBestItem(json.data);
+  queue.addItem(data);
+
+  const stats = calcBestStats(queue);
+  callback(null, stats);
+}
+
+//#endregion
+
+//#region depth feeds
+const depthFeeds = new Map();
+const currentAsks = new Map();
+const currentBids = new Map();
+
+function getDepthQueue(symbol) /* : Queue */ {
   if (depthFeeds.has(symbol))
     return depthFeeds.get(symbol);
-  
-  const cache = new MarketDepthQueue();
-  depthFeeds.set(symbol, cache);
-  return cache;
+  // create a new diff depth queue
+  const queue = new Queue(
+    CONFIG.DEPTH_QUEUE_SIZE,
+    {}
+  );
+
+  depthFeeds.set(symbol, queue);
+  return queue;
 }
 
-function createPublicCollector(symbols, callback) {
+function getCurrentAsks(symbol) /* : Map<float, float> */ {
+  if (currentAsks.has(symbol))
+    return currentAsks.get(symbol);
+  // create a new depth map
+  const depth = new Map();
+  currentAsks.set(symbol, depth);
+  return depth;
+}
+
+function getCurrentBids(symbol) /* : Map<float, float> */ {
+  if (currentBids.has(symbol))
+    return currentBids.get(symbol);
+  // create a new depth map
+  const depth = new Map();
+  currentBids.set(symbol, depth);
+  return depth;
+}
+
+function updateDepthTarget(target, source) /* : Map<float, float> */ {
+  const result = new Map();
+
+  for (const [ p, q ] of source) {
+    const price = Number(p);
+    const quantity = Number(q);
+    if (quantity === 0)
+      target.remove(price);
+    else {
+      target.set(price, quantity);
+      result.set(price, quantity);
+    }
+  }
+
+  return result;
+}
+
+function calcDepthVolume(depth) {
+  // get price and quantity
+  let sumPrice = 0;
+  let sumQty = 0;
+  let sumVol = 0;
+
+  // calculate volume
+  const size = depth.length;
+  for (let i = 0; i < size; ++i) {
+    const item = depth[i];
+    const price = Number(item[0]);
+    const qty = Number(item[1]);
+    sumPrice += price;
+    sumQty += qty;
+    sumVol += (price * qty);
+  }
+
+  return {
+    // add sums to stats
+    sumQty: sumQty,
+    sumVol: sumVol,
+
+    // calculate averages
+    avgPrice: sumPrice / size,
+    avgQty: sumQty / size,
+    avgVol: sumVol / size,
+    avgUnit: sumPrice / sumQty,
+  }
+}
+
+function calcDepthStats(queue, asks, bids) /* : Object */ {
+  const current = queue.getItem();
+
+  const askStat = calcDepthVolume(asks);
+  const bidStat = calcDepthVolume(bids);
+
+  return {
+    eventTime: current.eventTime,
+    startUpdateId: current.startUpdateId,
+    lastUpdateId: current.lastUpdateId,
+    askStat,
+    bidStat,
+    asks: current.asks,
+    bids: current.bids,
+  }
+}
+
+function handleDepthEndPoint(symbol, data, callback) {
+  const queue = getDepthQueue(symbol);
+  const asks = getCurrentAsks(symbol);
+  const bids = getCurrentBids(symbol);
+
+  // const item = parseDepthItem(data);
+  updateDepthTarget(asks, data.asks);
+  updateDepthTarget(bids, data.bids);
+  queue.addItem(data);
+
+  const stats = calcDepthStats(queue, asks, bids);
+  callback(null, stats);
+}
+
+//#endregion
+
+function createPublicStreamCollector(symbols, callback) {
   if (typeof symbols !== 'string')
     throw new Error('not implemented');
   
   return openPublicStream(
-    {
-      ...OPTIONS,
-      symbols
-    },
+    { ...OPTIONS, symbols },
     function processPublicStream(err, json) {
       if (!err) {
-        const symbol = json.symbol;
-        // get cache for symbol
-        let cache;
-        switch (json.endpoint) {
-          case ENDPOINT.TRADE:
-            cache = getMarketTradeQueue(symbol)
-            break;
-          case ENDPOINT.BOOKTICKER:
-            cache = getMarketTickerQueue(json);
-            break;
-          case ENDPOINT.DIFFDEPTH:
-            cache = getMarketDepthQueue(json);
-            break;
-          default:
-            callback('unknown endpoint response', json.endpoint);
-            return;
-        }
-        // add trade item to the cache
-        cache.addItem(json.data);
-        callback(null, cache.getStats());
+        callback(err, json);
+        return;
       }
-      callback(err, json);
+
+      const symbol = json.symbol;
+      switch (json.endpoint) {
+        case ENDPOINT.TRADE:
+          handleTradeEndPoint(symbol, json.data, callback);
+        case ENDPOINT.BOOKTICKER:
+          handleBestEndPoint(symbol, json.data, callback);
+        case ENDPOINT.DIFFDEPTH:
+          handleDepthEndPoint(symbol, json.data, callback);
+        default:
+          callback('unknown response endpoint', json.endpoint);
+      }
     });
 }
 
 module.exports = {
-  createPublicCollector: createPublicCollector,
+  createPublicStreamCollector,
 }
