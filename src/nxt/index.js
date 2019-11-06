@@ -19,8 +19,8 @@ function calcTradeStats(queue) /* : Object */ {
   const size = queue.size;
 
   // get event times
-  const closeTime = current.tradeTime;
-  const openTime = first.tradeTime || closeTime;
+  const closeTime = current.tradeTime; // * Number.EPSILON;
+  const openTime = (first.tradeTime || closeTime); // * Number.EPSILON;
 
   // get price and quantity
   let sumPrice = Number(current.price);
@@ -70,6 +70,7 @@ function calcBestStats(queue) /* : Object */ {
   const first = queue.getItem(1);
 
   return {
+    lastUpdateId: current.lastUpdateId,
     bestAskPrice: Number(current.bestAskPrice),
     bestAskQty: Number(current.bestAskQty),
     bestBidPrice: Number(current.bestBidPrice),
