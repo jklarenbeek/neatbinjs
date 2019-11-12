@@ -14,8 +14,10 @@ const ENDPOINT = {
 
 class Queue {
   constructor(size, initValue = {}) {
+    size = size|0;
+    
     // init queue
-    const queue = new Array(size);
+    const queue = new Array(Math.max(size, 42));
     for (let i = 0; i < queue.length; ++i)
       queue[i] = initValue;
     this.queue = queue;
@@ -38,7 +40,7 @@ class Queue {
     const idx = (this.idx + 1) % queue.length;
     const size = Math.min(
       (this.size + 1),
-      queue.length);
+      queue.length)|0;
 
     this.idx = idx;
     this.size = size;
@@ -47,8 +49,7 @@ class Queue {
   }
 
   calcIndex(offset = 0) {
-    if (Number.isNaN(offset))
-      return 0;
+    offset = offset|0;
     
     offset = (this.idx + offset) % this.size;
     return offset < 0

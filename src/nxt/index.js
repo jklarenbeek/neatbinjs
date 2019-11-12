@@ -12,6 +12,13 @@ function fixPrecision(number) {
   return Number(number.toFixed(8));
 }
 
+const CONST_24H_MSC = 1000 * 60 * 60 * 24;
+const CONST_24H_MAP = (2 * Math.PI) / CONST_24H_MSC;
+
+function normalize24H(date) {
+  return (Math.sin((date % CONST_24H_MSC) * CONST_24H_MAP) + 1) / 2;
+}
+
 function calcTradeStats(queue) /* : Object */ {
   // fetch first and last items
   const current = queue.getItem();
@@ -123,7 +130,6 @@ function calcDepthVolume(depth) /* : Object */ {
   // get price and quantity
   let sumPrice = 0;
   let sumQty = 0;
-  let sumVol = 0;
 
   // calculate volume
   for (const [price , quantity] of depth) {
@@ -131,21 +137,15 @@ function calcDepthVolume(depth) /* : Object */ {
     const q = Number(quantity);
     sumPrice += p;
     sumQty += q;
-    sumVol += (p * q);
   }
 
   const size = depth.size;
 
   return {
     // add sums to stats
+    sumPrice: sumPrice,
     sumQty: sumQty,
-    sumVol: sumVol,
-
-    // calculate averages
-    avgPrice: sumPrice / size,
-    avgQty: sumQty / size,
-    avgVol: sumVol / size,
-    avgUnit: sumPrice / sumQty,
+    count: size,
   }
 }
 
