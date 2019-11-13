@@ -238,6 +238,10 @@ function calcDepthStats(queue, asks, bids) /* : Object */ {
 }
 
 function createPublicStreamProcessor(options, callback) {
+  let lastEventTime = new Date();
+  let lastLocalTime = lastEventTime;
+  let lastTradeTime = lastEventTime;
+  
   return createPublicStreamCollector(options, function (err, json) {
     if (err) {
       callback(err, json);
@@ -246,9 +250,6 @@ function createPublicStreamProcessor(options, callback) {
 
     const endpoint = json.endpoint;
     const symbol = json.symbol;
-
-    let lastEventTime = new Date();
-    let lastLocalTime = lastEventTime;
 
     let stats;
     switch (endpoint) {
