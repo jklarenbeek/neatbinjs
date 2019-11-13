@@ -129,13 +129,13 @@ function calcBestStats(queue) /* : Object */ {
     bestAskPrice: Number(current.bestAskPrice),
     bestAskQty: Number(current.bestAskQty),
 
+    bestBidPrice: Number(current.bestBidPrice),
+    bestBidQty: Number(current.bestBidQty),
+
     lowAskPrice: lowAskPrice,
     highAskPrice: highAskPrice,
     sumAskPrice: sumAskPrice,
     sumAskQty: sumAskQty,
-
-    bestBidPrice: Number(current.bestBidPrice),
-    bestBidQty: Number(current.bestBidQty),
 
     lowBidPrice: lowBidPrice,
     highBidPrice: highBidPrice,
@@ -189,15 +189,19 @@ function updateDepthTarget(target, source) /* : Map<float, float> */ {
   return result;
 }
 
-function calcDepthVolume(depth) /* : Object */ {
+function calcDepthVolume(depth /* : Map<float, float> */ ) /* : Object */ {
   // get price and quantity
-  let sumPrice = 0;
-  let sumQty = 0;
+  let lowPrice = Number.MAX_VALUE;
+  let highPrice = +0.0;
+  let sumPrice = +0.0;
+  let sumQty = +0.0;
 
   // calculate volume
   for (const [price , quantity] of depth) {
     const p = Number(price);
     const q = Number(quantity);
+    lowPrice = Math.min(lowPrice, p);
+    highPrice = Math.max(highPrice, p);
     sumPrice += p;
     sumQty += q;
   }
@@ -205,7 +209,8 @@ function calcDepthVolume(depth) /* : Object */ {
   const size = depth.size;
 
   return {
-    // add sums to stats
+    lowPrice: lowPrice,
+    highPrice: highPrice,
     sumPrice: sumPrice,
     sumQty: sumQty,
     count: size,
@@ -241,6 +246,10 @@ function createPublicStreamProcessor(options, callback) {
 
     const endpoint = json.endpoint;
     const symbol = json.symbol;
+
+    let lastEventTime = new Date();
+    let lastLocalTime = lastEventTime;
+
     let stats;
     switch (endpoint) {
       case ENDPOINT.TRADE: {
