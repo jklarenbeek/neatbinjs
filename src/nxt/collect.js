@@ -66,6 +66,7 @@ class Queue {
 const tradeFeeds = new Map();
 const bestFeeds = new Map();
 const depthFeeds = new Map();
+
 function getTradeQueue(symbol) /* : Queue */ {
   if (tradeFeeds.has(symbol))
     return tradeFeeds.get(symbol);
@@ -112,7 +113,10 @@ function createPublicStreamCollector(options, callback) {
   actions[ENDPOINT.DIFFDEPTH] = getDepthQueue;
 
   return openPublicStream(
-    { ...options, endpoints: Object.values(ENDPOINT) },
+    {
+      ...options,
+      endpoints: Object.values(ENDPOINT),
+    },
     function processPublicStream(err, json) {
       if (err) {
         callback(err, json);
