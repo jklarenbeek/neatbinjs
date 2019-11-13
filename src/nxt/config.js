@@ -1,4 +1,94 @@
-const streamType = require('./types').publicStreamTypes;
+class AggTradesResponse {
+  // Event type
+  get eventType() { return this.e; }
+  // Event time
+  get eventTime() { return this.E; }
+  // Symbol
+  get symbol() { return this.s; }
+  // Trade ID
+  get aggTradeId() { return this.t; }
+  // Trade Time
+  get tradeTime() { return this.T; }
+  // Price
+  get price() { return this.p; }
+  // quantity
+  get quantity() { return this.q; }
+  // first trade ID
+  get firstTradeId() { return this.f; }
+  // last trade ID
+  get lastTradeId() { return this.l; }
+  // Is the buyer the market maker?
+  get isBuyerMarketMaker() { return this.m }
+  // Ignore
+  get __ignore__() { return this.M; }
+}
+
+class TradeResponse {
+  // Event type
+  get eventType() { return this.e; }
+  // Event time
+  get eventTime() { return this.E; }
+  // Symbol
+  get symbol() { return this.s; }
+  // Trade ID
+  get tradeId() { return this.t; }
+  // Trade Time
+  get tradeTime() { return this.T; }
+  // Price
+  get price() { return this.p; }
+  // quantity
+  get quantity() { return this.q; }
+  // Buyer order ID
+  get buyerOrderId() { return this.b; }
+  // Seller order ID
+  get sellerOrderID() { return this.a; }
+  // Is the buyer the market maker?
+  get isBuyerMarketMaker() { return this.m }
+  // Ignore
+  get __ignore__() { return this.M; }
+}
+
+class BookTickerResponse {
+  // order book updateId
+  get lastUpdateId() { return this.u; }
+  // symbol
+  get symbol() { return this.s; }
+  // best bid price
+  get bestBidPrice() { return this.b; }
+  // best bid qty
+  get bestBidQty() { return this.B; }
+  // best ask price
+  get bestAskPrice() { return this.a; }
+  // best ask qty
+  get bestAskQty() { return this.A; }
+}
+
+class PartialDepthResponse {
+  // Last update ID
+  // get lastUpdateId() { return this.lastUpdateId; }
+  // Bids to be updated
+  // get bids() { return this.bids; }
+  // Asks to be updated
+  // get asks() { return this.asks; }
+}
+
+class DepthUpdateResponse {
+  // Event type
+  get eventType() { return this.e; }
+  // Event time
+  get eventTime() { return this.E; }
+  // Symbol
+  get symbol() { return this.s; }
+  // First update ID in event
+  get startUpdateId() { return this.U; }
+  // Final update ID in event
+  get lastUpdateId() { return this.u; }
+  // Bids to be updated
+  get bids() { return this.b; }
+  // Asks to be updated
+  get asks() { return this.a; }
+  // foreach asks or bids entry contains [ price, qty ]
+}
 
 const publicStreams = {
   baseSingle: 'wss://stream.binance.com:9443/ws/',
@@ -8,13 +98,13 @@ const publicStreams = {
       path: '${symbol}@aggTrade',
       params: { symbol: String },
       interval: 0,
-      response: streamType.aggTrade,
+      response: AggTradesResponse,
     },
     trade: {
       path: '${symbol}@trade',
       params: { symbol: String },
       interval: 0,
-      response: streamType.trade,
+      response: TradeResponse,
     },
     klines2s: {
       path: '${symbol}@kline_${interval}',
@@ -108,12 +198,12 @@ const publicStreams = {
       path: '${symbol}@bookTicker',
       params: { symbol: String },
       interval: 0,
-      response: streamType.bookTicker,
+      response: BookTickerResponse,
     },
     bookTickerAll: {
       path: '!bookTicker',
       interval: 0,
-      response: [ streamType.bookTicker ]
+      response: { items: { $ref: BookTickerResponse } },
     },
     partialDepth1s: {
       path: '${symbol}@depth${level}',
@@ -122,7 +212,7 @@ const publicStreams = {
         level: [5, 10, 20],
       },
       interval: 1000,
-      response: streamType.partialDepth
+      response: PartialDepthResponse,
     },
     partialDepth100ms: {
       path: '${symbol}@depth${level}@100ms',
@@ -131,7 +221,7 @@ const publicStreams = {
         level: [5, 10, 20],
       },
       interval: 100,
-      response: streamType.partialDepth
+      response: { items: { $ref: PartialDepthResponse } },
     },
     diffDepth1s: {
       path: '${symbol}@depth',
@@ -141,12 +231,12 @@ const publicStreams = {
         //interval: { enum: [null, 100], template: '${interval}ms' }
       },
       interval: 1000,
-      response: streamType.depthUpdate,
+      response: DepthUpdateResponse,
     },
     diffDepth100ms: {
       path: '${symbol}@depth@100ms',
       params: { symbol: String },
-      response: streamType.depthUpdate,
+      response: DepthUpdateResponse,
     }
   },
 };

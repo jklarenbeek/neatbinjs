@@ -22,7 +22,7 @@ function normalize24H(date) {
   return +((Math.sin(convertDateToRad24H(date)) + 1.0) / 2.0);
 }
 
-function calcTradeStats(queue) /* : Object */ {
+function calcTradeStats(queue /* Queue<Trade> */) /* : Object */ {
   // fetch first and last items
   const current = queue.getItem();
   const first = queue.getItem(1);
@@ -34,13 +34,13 @@ function calcTradeStats(queue) /* : Object */ {
 
   // get price groups
   let lowPrice = Number(current.price);
-  let highPrice = Number(current.price);
-  let sumPrice = Number(current.price);
+  let highPrice = lowPrice;
+  let sumPrice = lowPrice;
 
   // get quantity groups
   let lowQty = Number(current.quantity);
-  let highQty = Number(current.quantity);
-  let sumQty = Number(current.quantity);
+  let highQty = lowQty;
+  let sumQty = lowQty;
 
   // calculate volume of cache
   for (let i = 1; i < size; ++i) {
@@ -53,12 +53,14 @@ function calcTradeStats(queue) /* : Object */ {
     sumPrice += price;
 
     lowQty = Math.min(lowQty, qty);
-    highQty = Math.max(highPrice, qty);
+    highQty = Math.max(highQty, qty);
     sumQty += qty;
   }
 
   // create and fill trade object
   return {
+    eventTime: current.eventTime,
+
     firstTradeId: first.tradeId,
     lastTradeId: current.tradeId,
   
@@ -67,15 +69,15 @@ function calcTradeStats(queue) /* : Object */ {
     closeTime: closeTime,
 
     // set price groups
-    openPrice: first.price,
-    closePrice: current.price,
-    closeQty: current.quantity,
+    openPrice: Number(first.price),
+    closePrice: Number(current.price),
+    closeQty: Number(current.quantity),
 
     lowPrice: lowPrice,
     highPrice: highPrice,
     sumPrice: sumPrice,
 
-    // set price groups
+    // set quantity groups
     lowQty: lowQty,
     highQty: highQty,
     sumQty: sumQty,
@@ -85,7 +87,7 @@ function calcTradeStats(queue) /* : Object */ {
   }
 }
 
-function calcBestStats(queue) /* : Object */ {
+function calcBestStats(queue /* Queue<BookTicker> */) /* : Object */ {
   const current = queue.getItem(0);
   const first = queue.getItem(1);
   const size = queue.size;
@@ -154,7 +156,7 @@ function calcBestStats(queue) /* : Object */ {
 const currentAsks = new Map();
 const currentBids = new Map();
 
-function getCurrentAsks(symbol) /* : Map<float, float> */ {
+function getCurrentAsks(symbol /* : String */) /* : Map<float, float> */ {
   if (currentAsks.has(symbol))
     return currentAsks.get(symbol);
   // create a new depth map
@@ -163,7 +165,7 @@ function getCurrentAsks(symbol) /* : Map<float, float> */ {
   return depth;
 }
 
-function getCurrentBids(symbol) /* : Map<float, float> */ {
+function getCurrentBids(symbol /* : String */) /* : Map<float, float> */ {
   if (currentBids.has(symbol))
     return currentBids.get(symbol);
   // create a new depth map
@@ -172,7 +174,9 @@ function getCurrentBids(symbol) /* : Map<float, float> */ {
   return depth;
 }
 
-function updateDepthTarget(target, source) /* : Map<float, float> */ {
+function updateDepthTarget(
+  target /* : Map<float, float> */,
+  source /* : Map<float, float> */) /* : Map<float, float> */ {
   const result = new Map();
 
   for (const [ p, q ] of source) {
@@ -217,7 +221,10 @@ function calcDepthVolume(depth /* : Map<float, float> */ ) /* : Object */ {
   }
 }
 
-function calcDepthStats(queue, asks, bids) /* : Object */ {
+function calcDepthStats(
+  queue /* : Queue<DepthUpdate> */,
+  asks /* : Map<float, float> */,
+  bids /* : Map<float, float> */) /* : Object */ {
   const current = queue.getItem();
 
   updateDepthTarget(asks, current.asks);
@@ -238,9 +245,9 @@ function calcDepthStats(queue, asks, bids) /* : Object */ {
 }
 
 function createPublicStreamProcessor(options, callback) {
-  let lastEventTime = new Date();
-  let lastLocalTime = lastEventTime;
-  let lastTradeTime = lastEventTime;
+  let lastLocalTime = +(new Date());
+  let lastEventTime = lastLocalTime;
+  let lastTradeTime = lastLocalTime;
   
   return createPublicStreamCollector(options, function (err, json) {
     if (err) {
@@ -255,20 +262,36 @@ function createPublicStreamProcessor(options, callback) {
     switch (endpoint) {
       case ENDPOINT.TRADE: {
         stats = calcTradeStats(json.queue);
+        lastLocalTime = +(new Date());
+        lastEventTime = stats.eventTime;
+        lastTradeTime = stats.closeTime;
         break;
       }
       case ENDPOINT.BESTBET: {
         stats = calcBestStats(json.queue);
+        const l = +(new Date());
+        const d = lastLocalTime - lastEventTime;
+        lastLocalTime = l;
+        lastEventTime = +(l + d);
         break;
       }
       case ENDPOINT.DIFFDEPTH: {
         const asks = getCurrentAsks(symbol);
         const bids = getCurrentBids(symbol);
         stats = calcDepthStats(json.queue, asks, bids);
+        lastLocalTime = +(new Date());
+        lastEventTime = stats.eventTime;
         break;
       }
     }
-    callback(null, { ...json, stats });
+    callback(null, {
+      ...json,
+      
+      lastEventTime: lastEventTime,
+      lastTradeTime: lastTradeTime,
+
+      stats,
+    });
   });
 }
 
