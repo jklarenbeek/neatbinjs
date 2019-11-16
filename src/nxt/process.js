@@ -2,12 +2,6 @@
 
 const { ENDPOINT, createPublicStreamCollector } = require('./collect');
 
-const OPTIONS = {
-  symbols: 'BTCUSDT',
-  params: { level: 5 },
-  ws: undefined,
-};
-
 function fixPrecision(number, count = 8) {
   return Number(number.toFixed(count));
 }
